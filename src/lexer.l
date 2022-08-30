@@ -52,6 +52,11 @@
 "," return MAKE(COMMA);
 ":" return MAKE(COLON);
 
+"+" return MAKE(PLUS);
+"-" return MAKE(MINUS);
+"*" return MAKE(STAR);
+"/" return MAKE(SLASH);
+
 <<EOF>> return yyterminate();
 
 . {

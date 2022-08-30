@@ -6,7 +6,13 @@
 #include <vector>
 
 namespace zips {
-enum class AstNodeType { COMPILATION_UNIT, FUNCTION };
+enum class AstNodeType {
+  COMPILATION_UNIT,
+  FUNCTION,
+  BINARY_EXPRESSION,
+  VARIABLE_REFERENCE,
+  RETURN_STATEMENT
+};
 
 class AstNode {
   AstNodeType type;
@@ -37,6 +43,39 @@ public:
   const std::string &getName() { return name; }
   const std::vector<NamedType> &getParameters() { return parameters; }
   const std::vector<std::unique_ptr<AstNode>> &getBody() { return body; }
+};
+enum class BinaryOperator { ADD, SUBTRACT, MULTIPLY, DIVIDE, MODULO };
+class BinaryExpressionNode : public AstNode {
+  BinaryOperator operatorType;
+  std::unique_ptr<AstNode> left;
+  std::unique_ptr<AstNode> right;
+
+public:
+  BinaryExpressionNode(BinaryOperator operatorType,
+                       std::unique_ptr<AstNode> left,
+                       std::unique_ptr<AstNode> right)
+      : AstNode(AstNodeType::BINARY_EXPRESSION), operatorType(operatorType),
+        left(std::move(left)), right(std::move(right)) {}
+  BinaryOperator getOperator() { return operatorType; }
+  const AstNode *getLeft() { return left.get(); }
+  const AstNode *getRight() { return right.get(); }
+};
+class ReturnStatementNode : public AstNode {
+  std::unique_ptr<AstNode> expression;
+
+public:
+  ReturnStatementNode(std::unique_ptr<AstNode> expression)
+      : AstNode(AstNodeType::RETURN_STATEMENT),
+        expression(std::move(expression)) {}
+  const AstNode *getExpression() { return expression.get(); }
+};
+class VariableReferenceNode : public AstNode {
+  std::string name;
+
+public:
+  VariableReferenceNode(std::string name)
+      : AstNode(AstNodeType::VARIABLE_REFERENCE), name(std::move(name)) {}
+  const std::string &getName() { return name; }
 };
 } // namespace zips
 

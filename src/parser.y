@@ -3,7 +3,7 @@
 %define api.token.constructor
 %define api.value.type variant
 %define api.value.automove
-%define parse.lac "full"
+%define parse.lac full
 
 %define api.namespace { zips }
 
@@ -38,7 +38,6 @@ zips::Parser::symbol_type yylex(zips::Lexer& lexer) {
 }
 
 using std::make_unique;
-using std::move;
 
 %}
 
@@ -58,14 +57,18 @@ using std::move;
 %token EQUALS "="
 %token LEFT_PAREN "(" RIGHT_PAREN ")" LEFT_BRACKET "[" RIGHT_BRACKET "]" LEFT_BRACE "{" RIGHT_BRACE "}"
 %token COMMA "," COLON ":"
+%token PLUS "+" MINUS "-" STAR "*" SLASH "/"
 
 %token END 0 "EOF"
 
-%type <std::unique_ptr<AstNode>> definition function
+%type <std::unique_ptr<AstNode>> definition function statement expression
 %type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list
 %type <std::unique_ptr<Type>> type primitive-type
 %type <NamedType> named-type
 %type <std::vector<NamedType>> parameter-list
+
+%left "+" "-"
+%left "*" "/"
 
 %start compilation_unit
 
@@ -142,8 +145,37 @@ primitive-type:
     $$ = make_unique<PrimitiveTypeNode>(PrimitiveTypeType::USIZE);
 }
 
-statement-list: {
+statement-list:
+statement-list statement {
+    auto statementList = $1;
+    statementList.push_back($2);
+    $$ = std::move(statementList);
+}
+| {
     $$ = std::vector<std::unique_ptr<AstNode>>{};
+}
+
+statement: 
+expression {
+    $$ = make_unique<ReturnStatementNode>($1);
+}
+| expression ";"
+
+expression:
+IDENTIFIER {
+    $$ = make_unique<VariableReferenceNode>($1);
+}
+| expression "+" expression {
+    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3);
+}
+| expression "-" expression {
+    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::SUBTRACT, $1, $3);
+}
+| expression "*" expression {
+    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::MULTIPLY, $1, $3);
+}
+| expression "/" expression {
+    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::DIVIDE, $1, $3);
 }
 
 %%
