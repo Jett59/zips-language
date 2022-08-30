@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# FlexLexer.h
+src/FlexLexer.h
+
+# Build output
+build/
