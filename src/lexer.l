@@ -23,7 +23,34 @@
 
 %%
 
-.*                { return MAKE_PARAMS(IDENTIFIER, yytext); }
+"\n"|" "|"\t"|"\r"|"\v"|"\f" ;
+
+"let" return MAKE(LET);
+
+"i8" return MAKE(I8);
+"i16" return MAKE(I16);
+"i32" return MAKE(I32);
+"i64" return MAKE(I64);
+"u8" return MAKE(U8);
+"u16" return MAKE(U16);
+"u32" return MAKE(U32);
+"u64" return MAKE(U64);
+"isize" return MAKE(ISIZE);
+"usize" return MAKE(USIZE);
+
+[a-zA-Z_][a-zA-Z0-9_]*                return MAKE_PARAMS(IDENTIFIER, yytext);
+
+"=" return MAKE(EQUALS);
+
+"(" return MAKE(LEFT_PAREN);
+")" return MAKE(RIGHT_PAREN);
+"[" return MAKE(LEFT_BRACKET);
+"]" return MAKE(RIGHT_BRACKET);
+"{" return MAKE(LEFT_BRACE);
+"}" return MAKE(RIGHT_BRACE);
+
+"," return MAKE(COMMA);
+":" return MAKE(COLON);
 
 <<EOF>> return yyterminate();
 
