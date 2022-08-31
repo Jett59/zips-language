@@ -46,6 +46,11 @@ using std::make_unique;
 %parse-param { std::string fileName }
 %parse-param {std::unique_ptr<zips::AstNode> *ast}
 
+%initial-action {
+    // Set the location's fileName.
+    @$.initialize(&fileName);
+}
+
 %token <std::string> IDENTIFIER "identifier"
 
 %token LET "let"
@@ -75,7 +80,7 @@ using std::make_unique;
 %%
 
 compilation_unit: definitions {
-    *ast = make_unique<CompilationUnitNode>($1);
+    *ast = make_unique<CompilationUnitNode>(@1, $1);
 }
 
 definitions: definitions definition {
@@ -90,7 +95,7 @@ definitions: definitions definition {
 definition: function
 
 function: "let" IDENTIFIER "(" parameter-list ")" "=" "{" statement-list "}" {
-    $$ = make_unique<FunctionNode>($2, $4, $8);
+    $$ = make_unique<FunctionNode>(@1, $2, $4, $8);
 }
 
 parameter-list: parameter-list "," named-type {
@@ -157,25 +162,25 @@ statement-list statement {
 
 statement: 
 expression {
-    $$ = make_unique<ReturnStatementNode>($1);
+    $$ = make_unique<ReturnStatementNode>(@1, $1);
 }
 | expression ";"
 
 expression:
 IDENTIFIER {
-    $$ = make_unique<VariableReferenceNode>($1);
+    $$ = make_unique<VariableReferenceNode>(@1, $1);
 }
 | expression "+" expression {
-    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3);
+    $$ = make_unique<BinaryExpressionNode>(@2, BinaryOperator::ADD, $1, $3);
 }
 | expression "-" expression {
-    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::SUBTRACT, $1, $3);
+    $$ = make_unique<BinaryExpressionNode>(@2, BinaryOperator::SUBTRACT, $1, $3);
 }
 | expression "*" expression {
-    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::MULTIPLY, $1, $3);
+    $$ = make_unique<BinaryExpressionNode>(@2, BinaryOperator::MULTIPLY, $1, $3);
 }
 | expression "/" expression {
-    $$ = make_unique<BinaryExpressionNode>(BinaryOperator::DIVIDE, $1, $3);
+    $$ = make_unique<BinaryExpressionNode>(@2, BinaryOperator::DIVIDE, $1, $3);
 }
 
 %%

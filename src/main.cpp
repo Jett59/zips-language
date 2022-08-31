@@ -26,7 +26,8 @@ int main(int argc, char **argv) {
   int result = parser();
   input.close();
   if (result == 0) {
-    std::cout << "Success!" << std::endl;
+    std::cout << ast->getLocation().file << std::endl;
+    std::cout << ast->toString() << std::endl;
   }else {
     std::cerr << "Error!" << std::endl;
   }
