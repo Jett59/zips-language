@@ -110,8 +110,8 @@ public:
       : AstNode(AstNodeType::BINARY_EXPRESSION, location), operatorType(operatorType),
         left(std::move(left)), right(std::move(right)) {}
   BinaryOperator getOperator() { return operatorType; }
-  const AstNode *getLeft() { return left.get(); }
-  const AstNode *getRight() { return right.get(); }
+  AstNode *getLeft() { return left.get(); }
+  AstNode *getRight() { return right.get(); }
 
   std::string toString() override {
     std::string result = "BinaryExpressionNode {\n";
@@ -129,7 +129,7 @@ public:
   ReturnStatementNode(Location location, std::unique_ptr<AstNode> expression)
       : AstNode(AstNodeType::RETURN_STATEMENT, location),
         expression(std::move(expression)) {}
-  const AstNode *getExpression() { return expression.get(); }
+  AstNode *getExpression() { return expression.get(); }
 
   std::string toString() override {
     std::string result = "ReturnStatementNode {\n";

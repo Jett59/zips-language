@@ -1,6 +1,8 @@
 #include "ast.h"
+#include "typeCheck.h"
 #include "lexer.h"
 #include "parser.hh"
+#include "error.h"
 #include <fstream>
 
 void usage(const char *program) {
@@ -26,8 +28,11 @@ int main(int argc, char **argv) {
   int result = parser();
   input.close();
   if (result == 0) {
-    std::cout << ast->getLocation().file << std::endl;
-    std::cout << ast->toString() << std::endl;
+    try {
+      checkTypes(ast.get());
+    }catch (const ZipsError &e) {
+      error(e);
+    }
   }else {
     std::cerr << "Error!" << std::endl;
   }

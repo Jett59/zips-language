@@ -5,18 +5,19 @@
 #include "type.h"
 #include <exception>
 #include <memory>
+#include <map>
+#include <vector>
 
 namespace zips {
 struct Context {
-  std::optional<std::unique_ptr<Type>> &currentFunctionReturnType;
+  std::optional<Type *> currentFunctionReturnType;
+  std::vector<std::map<std::string, Type *>> symbolTable;
 };
-class TypeError : public std::exception {
-  std::string message;
-
-public:
-  TypeError(std::string message) : message(message) {}
-  const char *what() const noexcept override { return message.c_str(); }
-};
+void checkTypes(AstNode *node, Context &context);
+static inline void checkTypes(AstNode *ast) {
+  Context context;
+  checkTypes(ast, context);
+}
 } // namespace zips
 
 #endif
