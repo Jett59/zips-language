@@ -40,7 +40,16 @@ public:
 
   std::optional<std::unique_ptr<Type>> type;
 
-  virtual std::string toString() = 0;
+  std::string toString() {
+    if (type) {
+      return type->get()->toString() + ": " + toStringInternal();
+    }else {
+      return toStringInternal();
+    }
+  }
+
+  private:
+   virtual std::string toStringInternal() const = 0;
 };
 class CompilationUnitNode : public AstNode {
   std::vector<std::unique_ptr<AstNode>> nodes;
@@ -50,7 +59,7 @@ public:
       : AstNode(AstNodeType::COMPILATION_UNIT, location), nodes(std::move(nodes)) {}
   const std::vector<std::unique_ptr<AstNode>> &getNodes() { return nodes; }
 
-  std::string toString() override {
+  std::string toStringInternal() const override {
     std::string result = "CompilationUnitNode {\n";
     for (auto &node : nodes) {
       result += node->toString() + "\n";
@@ -73,7 +82,7 @@ public:
   const std::vector<NamedType> &getParameters() { return parameters; }
   const std::vector<std::unique_ptr<AstNode>> &getBody() { return body; }
 
-  std::string toString() override {
+  std::string toStringInternal() const override {
     std::string result = "FunctionNode {\n";
     result += "name: " + name + "\n";
     result += "parameters: [\n";
@@ -113,7 +122,7 @@ public:
   AstNode *getLeft() { return left.get(); }
   AstNode *getRight() { return right.get(); }
 
-  std::string toString() override {
+  std::string toStringInternal() const override {
     std::string result = "BinaryExpressionNode {\n";
     result += "operator: " + binaryOperatorToString[operatorType] + "\n";
     result += "left: " + left->toString() + "\n";
@@ -131,7 +140,7 @@ public:
         expression(std::move(expression)) {}
   AstNode *getExpression() { return expression.get(); }
 
-  std::string toString() override {
+  std::string toStringInternal() const  override {
     std::string result = "ReturnStatementNode {\n";
     result += "expression: " + expression->toString() + "\n";
     result += "}";
@@ -146,7 +155,7 @@ public:
       : AstNode(AstNodeType::VARIABLE_REFERENCE, location), name(std::move(name)) {}
   const std::string &getName() { return name; }
 
-  std::string toString() override {
+  std::string toStringInternal() const  override {
     std::string result = "VariableReferenceNode {\n";
     result += "name: " + name + "\n";
     result += "}";
