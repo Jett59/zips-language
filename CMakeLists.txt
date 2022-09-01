@@ -13,6 +13,7 @@ bison_target(parser src/parser.y "${CMAKE_CURRENT_BINARY_DIR}/parser.cc")
 flex_target(lexer src/lexer.l "${CMAKE_CURRENT_BINARY_DIR}/lexer.cc")
 
 add_executable(zips
+src/typeCheck.cpp
 src/error.cpp
     src/main.cpp
     "${CMAKE_CURRENT_BINARY_DIR}/lexer.cc"
