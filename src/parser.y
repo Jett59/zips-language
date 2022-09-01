@@ -47,7 +47,7 @@ using std::make_unique;
 %parse-param {std::unique_ptr<zips::AstNode> *ast}
 
 %initial-action {
-    // Set the location's fileName.
+    // Set the file name on the initial location (goes into compilation-unit).
     @$.initialize(&fileName);
 }
 
@@ -75,11 +75,11 @@ using std::make_unique;
 %left "+" "-"
 %left "*" "/"
 
-%start compilation_unit
+%start compilation-unit
 
 %%
 
-compilation_unit: definitions {
+compilation-unit: definitions {
     *ast = make_unique<CompilationUnitNode>(@1, $1);
 }
 

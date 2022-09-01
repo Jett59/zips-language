@@ -20,8 +20,9 @@ private:
   location currentLocation;
 
 public:
-  Lexer(std::istream &input)
+  Lexer(std::istream &input, std::string &fileName)
       : yyFlexLexer(&input) {
+        currentLocation.begin.filename = &fileName;
   }
   Parser::symbol_type next();
   location getLocation() { return currentLocation; }

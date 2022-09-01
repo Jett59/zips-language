@@ -23,13 +23,14 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::unique_ptr<AstNode> ast;
-  Lexer lexer(input);
+  Lexer lexer(input, fileName);
   Parser parser(lexer, fileName, &ast);
   int result = parser();
   input.close();
   if (result == 0) {
     try {
       checkTypes(ast.get());
+      std::cout << ast->toString() << std::endl;
     }catch (const ZipsError &e) {
       error(e);
     }

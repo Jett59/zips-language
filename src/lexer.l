@@ -67,9 +67,10 @@
 %%
 
 void zips::Lexer::updateLocation(const char* token) {
+    auto fileName = currentLocation.begin.filename;
     currentLocation.begin = currentLocation.end;
-    int tokenLength = strlen(token);
-    for (int i = 0; i < tokenLength; i ++) {
+size_t tokenLength = strlen(token);
+    for (size_t i = 0; i < tokenLength; i ++) {
         char c = token[i];
         if (c == '\n') {
             currentLocation.end.line++;
@@ -78,4 +79,5 @@ void zips::Lexer::updateLocation(const char* token) {
             currentLocation.end.column++;
         }
     }
+    currentLocation.begin.filename = currentLocation.end.filename = fileName;
 }
