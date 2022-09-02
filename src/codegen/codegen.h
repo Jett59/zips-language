@@ -12,6 +12,14 @@ static inline std::vector<T> &operator+=(std::vector<T> &lhs, const T &rhs) {
   lhs.push_back(rhs);
   return lhs;
 }
+template<typename T>
+static inline std::vector<T> &operator+=(std::vector<T> &lhs, const std::optional<T> &rhs) {
+  if (rhs) {
+    return lhs += *rhs;
+  }else {
+    return lhs;
+  }
+}
 template <typename T>
 static inline std::vector<T> &operator+=(std::vector<T> &lhs,
                                          const std::vector<T> &rhs) {
@@ -392,8 +400,13 @@ public:
     return Instruction{"pop", OperandSize::I64, {Operand{reg}}};
   }
 
-  Instruction move(OperandSize size, Register from, Register to) {
-    return Instruction{"mov", size, {Operand{from}, Operand{to}}};
+  std::optional<Instruction> move(OperandSize size, Register from,
+                                  Register to) {
+    if (from != to) {
+      return Instruction{"mov", size, {Operand{from}, Operand{to}}};
+    } else {
+      return std::nullopt;
+    }
   }
 
   Instruction jump(const std::string &label) {
@@ -403,7 +416,7 @@ public:
   std::vector<Instruction> add(OperandSize size, Register a, Register b,
                                Register dest) {
     std::vector<Instruction> result;
-    result += Instruction{"mov", size, {Operand{a}, Operand{dest}}};
+    result += move(size, a, dest);
     result += Instruction{"add", size, {Operand{b}, Operand{dest}}};
     return result;
   }
@@ -497,10 +510,11 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
     }
   }
 
-  Value add(Function &function, const Value &a, const Value &b) {
-    Value result = function.createValue(a.size);
+  Value add(Function &function, const Value &a, const Value &b,
+            bool destroyValues) {
     Register registerA = getIntoRegister(function, a);
     Register registerB = getIntoRegister(function, b);
+    Value result = function.createValue(a.size);
     Register registerResult = getIntoRegister(function, result);
     function.instructions += instructionGenerator.add(
         result.size, registerA, registerB, registerResult);
@@ -533,10 +547,14 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       auto binaryExpression = static_cast<BinaryExpressionNode *>(node);
       Value left = generateExpression(function, binaryExpression->getLeft());
       Value right = generateExpression(function, binaryExpression->getRight());
+      // Destroy the left and right operands so they can be used as the result
+      // value.
+      function.destroyValue(left);
+      function.destroyValue(right);
       Value result;
       switch (binaryExpression->getOperator()) {
       case BinaryOperator::ADD: {
-        result = add(function, left, right);
+        result = add(function, left, right, true);
         break;
       }
       default:
@@ -580,8 +598,8 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       parameters[parameter.name] = function.createValue(
           InstructionGenerator::operandSizeFromBits(
               getBits(static_cast<PrimitiveTypeNode *>(parameter.type.get())
-                          ->getPrimitiveType())), true,
-          InstructionGenerator::parameterPassingRegisters()[i]);
+                          ->getPrimitiveType())),
+          true, InstructionGenerator::parameterPassingRegisters()[i]);
       i++;
     }
     function.variables += std::move(parameters);
