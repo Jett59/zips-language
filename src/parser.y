@@ -61,7 +61,7 @@ using std::make_unique;
 
 %token EQUALS "="
 %token LEFT_PAREN "(" RIGHT_PAREN ")" LEFT_BRACKET "[" RIGHT_BRACKET "]" LEFT_BRACE "{" RIGHT_BRACE "}"
-%token COMMA "," COLON ":"
+%token COMMA "," COLON ":" SEMICOLON ";"
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/"
 
 %token END 0 "EOF"

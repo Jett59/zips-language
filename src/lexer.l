@@ -51,6 +51,7 @@
 
 "," return MAKE(COMMA);
 ":" return MAKE(COLON);
+";" return MAKE(SEMICOLON);
 
 "+" return MAKE(PLUS);
 "-" return MAKE(MINUS);
