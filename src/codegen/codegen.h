@@ -6,14 +6,25 @@
 #include <variant>
 
 namespace zips {
+// Allow us to add to vectors using +=.
+template <typename T>
+static inline std::vector<T> &operator+=(std::vector<T> &lhs, const T &rhs) {
+  lhs.push_back(rhs);
+  return lhs;
+}
+template <typename T>
+static inline std::vector<T> &operator+=(std::vector<T> &lhs,
+                                         const std::vector<T> &rhs) {
+  lhs.insert(lhs.end(), rhs.begin(), rhs.end());
+  return lhs;
+}
+
 enum class TargetArchitecture { X86_64, AARCH64 };
 enum class TargetAbi { X86_64, MS_X64, AARCH64_EABI };
 
-template <TargetArchitecture arch, TargetAbi abi> class InstructionGenerator {
-  static_assert(false, "Architecture or abi not implemented");
-};
+template <TargetArchitecture arch, TargetAbi abi> class AssemblyInstructionGenerator {};
 template <TargetAbi abi>
-class InstructionGenerator<TargetArchitecture::X86_64, abi> {
+class AssemblyInstructionGenerator<TargetArchitecture::X86_64, abi> {
 public:
   enum class Register {
     RAX,
@@ -62,8 +73,23 @@ public:
     }
   }
   static constexpr size_t stackAlignmentOnCall = 16;
+  static constexpr Register RETURN_VALUE_REGISTER = Register::RAX;
 
   enum class OperandSize { I8, I16, I32, I64 };
+
+  static constexpr OperandSize operandSizeFromBits(size_t bits) {
+    if (bits <= 8) {
+      return OperandSize::I8;
+    } else if (bits <= 16) {
+      return OperandSize::I16;
+    } else if (bits <= 32) {
+      return OperandSize::I32;
+    } else if (bits <= 64) {
+      return OperandSize::I64;
+    } else {
+      throw std::runtime_error("Invalid operand size");
+    }
+  }
 
   static constexpr size_t getSize(OperandSize size) {
     switch (size) {
@@ -76,69 +102,183 @@ public:
     case OperandSize::I64:
       return 8;
     }
+    return 0;
   }
 
-  static std::map < Register,
-      std::string >>
-          registerToString64 = {{Register::RAX, "rax"}, {Register::RCX, "rcx"},
-                                {Register::RDX, "rdx"}, {Register::RBX, "rbx"},
-                                {Register::RBP, "rbp"}, {Register::RSP, "rsp"},
-                                {Register::RSI, "rsi"}, {Register::RDI, "rdi"},
-                                {Register::R8, "r8"},   {Register::R9, "r9"},
-                                {Register::R10, "r10"}, {Register::R11, "r11"},
-                                {Register::R12, "r12"}, {Register::R13, "r13"},
-                                {Register::R14, "r14"}, {Register::R15, "r15"}};
-  static std::map < Register,
-      std::string >> registerToString32 = {
-          {Register::RAX, "eax"},  {Register::RCX, "ecx"},
-          {Register::RDX, "edx"},  {Register::RBX, "ebx"},
-          {Register::RBP, "ebp"},  {Register::RSP, "esp"},
-          {Register::RSI, "esi"},  {Register::RDI, "edi"},
-          {Register::R8, "r8d"},   {Register::R9, "r9d"},
-          {Register::R10, "r10d"}, {Register::R11, "r11d"},
-          {Register::R12, "r12d"}, {Register::R13, "r13d"},
-          {Register::R14, "r14d"}, {Register::R15, "r15d"}};
-  static std::map < Register,
-      std::string >> registerToString16 = {
-          {Register::RAX, "ax"},   {Register::RCX, "cx"},
-          {Register::RDX, "dx"},   {Register::RBX, "bx"},
-          {Register::RBP, "bp"},   {Register::RSP, "sp"},
-          {Register::RSI, "si"},   {Register::RDI, "di"},
-          {Register::R8, "r8w"},   {Register::R9, "r9w"},
-          {Register::R10, "r10w"}, {Register::R11, "r11w"},
-          {Register::R12, "r12w"}, {Register::R13, "r13w"},
-          {Register::R14, "r14w"}, {Register::R15, "r15w"}};
-  static std::map < Register,
-      std::string >> registerToString8 = {
-          {Register::RAX, "al"},   {Register::RCX, "cl"},
-          {Register::RDX, "dl"},   {Register::RBX, "bl"},
-          {Register::RBP, "bpl"},  {Register::RSP, "spl"},
-          {Register::RSI, "sil"},  {Register::RDI, "dil"},
-          {Register::R8, "r8b"},   {Register::R9, "r9b"},
-          {Register::R10, "r10b"}, {Register::R11, "r11b"},
-          {Register::R12, "r12b"}, {Register::R13, "r13b"},
-          {Register::R14, "r14b"}, {Register::R15, "r15b"}};
+  static constexpr std::string registerToString64(Register reg) {
+    switch (reg) {
+    case Register::RAX:
+      return "rax";
+    case Register::RCX:
+      return "rcx";
+    case Register::RDX:
+      return "rdx";
+    case Register::RBX:
+      return "rbx";
+    case Register::RBP:
+      return "rbp";
+    case Register::RSP:
+      return "rsp";
+    case Register::RSI:
+      return "rsi";
+    case Register::RDI:
+      return "rdi";
+    case Register::R8:
+      return "r8";
+    case Register::R9:
+      return "r9";
+    case Register::R10:
+      return "r10";
+    case Register::R11:
+      return "r11";
+    case Register::R12:
+      return "r12";
+    case Register::R13:
+      return "r13";
+    case Register::R14:
+      return "r14";
+    case Register::R15:
+      return "r15";
+    }
+    return "Unknown";
+  }
+  static constexpr std::string registerToString32(Register reg) {
+    switch (reg) {
+    case Register::RAX:
+      return "eax";
+    case Register::RCX:
+      return "ecx";
+    case Register::RDX:
+      return "edx";
+    case Register::RBX:
+      return "ebx";
+    case Register::RBP:
+      return "ebp";
+    case Register::RSP:
+      return "esp";
+    case Register::RSI:
+      return "esi";
+    case Register::RDI:
+      return "edi";
+    case Register::R8:
+      return "r8d";
+    case Register::R9:
+      return "r9d";
+    case Register::R10:
+      return "r10d";
+    case Register::R11:
+      return "r11d";
+    case Register::R12:
+      return "r12d";
+    case Register::R13:
+      return "r13d";
+    case Register::R14:
+      return "r14d";
+    case Register::R15:
+      return "r15d";
+    }
+    return "Unknown";
+  }
+  static constexpr std::string registerToString16(Register reg) {
+    switch (reg) {
+    case Register::RAX:
+      return "ax";
+    case Register::RCX:
+      return "cx";
+    case Register::RDX:
+      return "dx";
+    case Register::RBX:
+      return "bx";
+    case Register::RBP:
+      return "bp";
+    case Register::RSP:
+      return "sp";
+    case Register::RSI:
+      return "si";
+    case Register::RDI:
+      return "di";
+    case Register::R8:
+      return "r8w";
+    case Register::R9:
+      return "r9w";
+    case Register::R10:
+      return "r10w";
+    case Register::R11:
+      return "r11w";
+    case Register::R12:
+      return "r12w";
+    case Register::R13:
+      return "r13w";
+    case Register::R14:
+      return "r14w";
+    case Register::R15:
+      return "r15w";
+    }
+    return "Unknown";
+  }
+  static constexpr std::string registerToString8(Register reg) {
+    switch (reg) {
+    case Register::RAX:
+      return "al";
+    case Register::RCX:
+      return "cl";
+    case Register::RDX:
+      return "dl";
+    case Register::RBX:
+      return "bl";
+    case Register::RBP:
+      return "bpl";
+    case Register::RSP:
+      return "spl";
+    case Register::RSI:
+      return "sil";
+    case Register::RDI:
+      return "dil";
+    case Register::R8:
+      return "r8b";
+    case Register::R9:
+      return "r9b";
+    case Register::R10:
+      return "r10b";
+    case Register::R11:
+      return "r11b";
+    case Register::R12:
+      return "r12b";
+    case Register::R13:
+      return "r13b";
+    case Register::R14:
+      return "r14b";
+    case Register::R15:
+      return "r15b";
+    }
+    return "Unknown";
+  }
 
   static constexpr std::string registerToString(OperandSize size,
-                                                Register register) {
-    switch (operandSize) {
+                                                Register reg) {
+    switch (size) {
     case OperandSize::I8:
-      return registerToString8[register];
+      return registerToString8(reg);
     case OperandSize::I16:
-      return registerToString16[register];
+      return registerToString16(reg);
     case OperandSize::I32:
-      return registerToString32[register];
+      return registerToString32(reg);
     case OperandSize::I64:
-      return registerToString64[register];
+      return registerToString64(reg);
     }
+    return "Unknown";
   }
 
   struct Operand {
-    OperandSize size;
-    std::variant<Register, size_t> value;
+    struct MemoryOperand {
+      Register base;
+      size_t offset;
+    };
+    std::variant<Register, size_t, std::string, MemoryOperand> value;
   };
   struct Instruction {
     std::string mnemonic;
+    OperandSize size;
     std::vector<Operand> operands;
 
     std::string toString() const {
@@ -146,10 +286,16 @@ public:
       result += mnemonic + " ";
       for (auto &operand : operands) {
         if (std::holds_alternative<Register>(operand.value)) {
-          result += "%" + registerToString(operand.size,
-                                           std::get<Register>(operand.value));
-        } else {
+          result +=
+              "%" + registerToString(size, std::get<Register>(operand.value));
+        } else if (std::holds_alternative<size_t>(operand.value)) {
           result += "$" + std::to_string(std::get<size_t>(operand.value));
+        } else if (std::holds_alternative<std::string>(operand.value)) {
+          result += std::get<std::string>(operand.value);
+        } else {
+          auto &mem = std::get<typename Operand::MemoryOperand>(operand.value);
+          result += std::to_string(mem.offset) + "(%" +
+                    registerToString64(mem.base) + ")";
         }
         result += ", ";
       }
@@ -189,34 +335,69 @@ public:
 
   std::vector<Instruction> generateProlog(size_t stackAllocationSize) {
     std::vector<Instruction> result;
-    result.push_back(
-        Instruction{"push", {Operand{OperandSize::I64, Register::RBP}}});
-    result.push_back(Instruction{"mov",
-                                 {Operand{OperandSize::I64, Register::RSP},
-                                  Operand{OperandSize::I64, Register::RBP}}});
-    result.push_back(
-        Instruction{"sub",
-                    {Operand{OperandSize::I64, stackAllocationSize},
-                     Operand{OperandSize::I64, Register::RSP}}});
+    result += Instruction{"push", OperandSize::I64, {Operand{Register::RBP}}};
+    result += Instruction{"mov",
+                          OperandSize::I64,
+                          {Operand{Register::RSP}, Operand{Register::RBP}}};
+    if (stackAllocationSize > 0) {
+      result +=
+          Instruction{"sub",
+                      OperandSize::I64,
+                      {Operand{stackAllocationSize}, Operand{Register::RSP}}};
+    }
     return result;
+  }
+  std::vector<Instruction> generateEpilog(size_t stackAllocationSize) {
+    std::vector<Instruction> result;
+    if (stackAllocationSize > 0) {
+      result +=
+          Instruction{"add",
+                      OperandSize::I64,
+                      {Operand{stackAllocationSize}, Operand{Register::RSP}}};
+    }
+    result += Instruction{"pop", OperandSize::I64, {Operand{Register::RBP}}};
+    result += Instruction{"ret", OperandSize::I64, {}};
+    return result;
+  }
+
+  Instruction generateLabel(const std::string &name) {
+    return Instruction{name, OperandSize::I64, {}};
+  }
+
+  Instruction generateSaveRegister(Register reg) {
+    return Instruction{"push", OperandSize::I64, {Operand{reg}}};
+  }
+  Instruction generateRestoreRegister(Register reg) {
+    return Instruction{"pop", OperandSize::I64, {Operand{reg}}};
+  }
+
+  Instruction move(OperandSize size, Register from, Register to) {
+    return Instruction{"mov", size, {Operand{from}, Operand{to}}};
+  }
+
+  Instruction jump(const std::string &label) {
+    return Instruction{"jmp", OperandSize::I64, {Operand{label}}};
   }
 };
 
 template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
-  using InstructionGenerator = InstructionGenerator<arch, abi>;
-  using InstructionGenerator::Instruction;
-  using InstructionGenerator::OperandSize;
-  using InstructionGenerator::Register;
+  using InstructionGenerator = AssemblyInstructionGenerator<arch, abi>;
+  using Instruction = InstructionGenerator::Instruction;
+  using OperandSize = InstructionGenerator::OperandSize;
+  using Register = InstructionGenerator::Register;
 
   InstructionGenerator instructionGenerator;
 
   struct Value {
     OperandSize size;
     std::variant<Register, size_t> position; // Register or stack offset.
+    bool variable = false;
   };
 
   struct Function {
     std::string name;
+    std::vector<std::map<std::string, Value>> variables;
+    std::string labelPrefix;
     std::vector<Instruction> instructions;
     std::vector<Register> savedRegisters;
     size_t stackAllocationSize = 0;
@@ -227,10 +408,13 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
 
     Value createValue(OperandSize size) {
       if (availableRegisters.size() > 0) {
-        return Value{size, availableRegisters.pop_back()};
+        Register chosenRegister = availableRegisters.back();
+        availableRegisters.pop_back();
+        return Value{size, chosenRegister};
       } else if (remainingCalleeSavedRegisters.size() > 0) {
-        Register chosenRegister = remainingCalleeSavedRegisters.pop_back();
-        savedRegisters.push_back(chosenRegister);
+        Register chosenRegister = remainingCalleeSavedRegisters.back();
+        remainingCalleeSavedRegisters.pop_back();
+        savedRegisters += chosenRegister;
         return Value{size, chosenRegister};
       } else {
         size_t sizeBytes = InstructionGenerator::getSize(size);
@@ -241,16 +425,138 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       }
     }
     void destroyValue(Value value) {
-      if (std::holds_alternative<Register>(value)) {
-        availableRegisters.push_back(std::get<Register>(value));
+      if (!value.variable && std::holds_alternative<Register>(value.position)) {
+        availableRegisters += std::get<Register>(value.position);
       }
     }
+    void destroyVariable(Value value) {
+      if (value.variable && std::holds_alternative<Register>(value.position)) {
+        availableRegisters += std::get<Register>(value.position);
+      }
+    }
+    Value createValue(OperandSize size, Register position) {
+      return Value{size, position};
+    }
   };
+
+  Register getIntoRegister(Function &function, const Value &value) {
+    if (std::holds_alternative<Register>(value.position)) {
+      return std::get<Register>(value.position);
+    } else {
+      throw std::runtime_error("Not implemented - out of registers");
+    }
+  }
+  void getBackToValue(Function &function, Register allocatedRegister,
+                      const Value &value) {
+    if (std::holds_alternative<Register>(value.position)) {
+      Register targetRegister = std::get<Register>(value.position);
+      if (allocatedRegister != targetRegister) {
+        function.instructions += instructionGenerator.generateMove(
+            value.size, allocatedRegister, targetRegister);
+      }
+    } else {
+      function.instructions += instructionGenerator.generateStackStore(
+          value.size, allocatedRegister, std::get<size_t>(value.position));
+    }
+  }
+
+  Value add(Function &function, const Value &a, const Value &b) {
+    Value result = function.createValue(a.size);
+    Register registerA = getIntoRegister(function, a);
+    Register registerB = getIntoRegister(function, b);
+    Register registerResult = getIntoRegister(function, result);
+    function.instructions += instructionGenerator.add(
+        result.size, registerA, registerB, registerResult);
+    getBackToValue(function, registerResult, result);
+    return result;
+  }
+
+  void returnValue(Function &function, const Value &value) {
+    Register valueRegister = getIntoRegister(function, value);
+    function.instructions += instructionGenerator.move(
+        value.size, valueRegister, InstructionGenerator::RETURN_VALUE_REGISTER);
+    function.instructions +=
+        instructionGenerator.jump(function.labelPrefix + "_end");
+  }
+
+  Value generateExpression(Function &function, AstNode *node) {
+    switch (node->getNodeType()) {
+    case AstNodeType::VARIABLE_REFERENCE: {
+      std::string variableName =
+          static_cast<VariableReferenceNode *>(node)->getName();
+      for (auto variableScope = function.variables.rbegin();
+           variableScope != function.variables.rend(); variableScope++) {
+        if (variableScope->contains(variableName)) {
+          return (*variableScope)[variableName];
+        }
+      }
+      throw std::runtime_error("Variable not found");
+    }
+    default:
+      throw std::runtime_error("Unimplemented expression type");
+    }
+  }
+
+  void generateStatement(Function &function, AstNode *node) {
+    switch (node->getNodeType()) {
+    case AstNodeType::RETURN_STATEMENT: {
+      returnValue(
+          function,
+          generateExpression(
+              function,
+              static_cast<ReturnStatementNode *>(node)->getExpression()));
+      break;
+    }
+    default:
+      function.destroyValue(generateExpression(function, node));
+    }
+  }
+
+  Function generateFunction(FunctionNode *node, size_t functionIndex) {
+    Function function;
+    function.name = node->getName();
+    function.labelPrefix = "l" + std::to_string(functionIndex);
+    std::map<std::string, Value> parameters;
+    for (auto &parameter : node->getParameters()) {
+      if (parameter.type->getType() != TypeType::PRIMITIVE) {
+        throw std::runtime_error("Not implemented - non-primitive parameters");
+      }
+      parameters[parameter.name] =
+          function.createValue(InstructionGenerator::operandSizeFromBits(
+              getBits(static_cast<PrimitiveTypeNode *>(parameter.type.get())
+                          ->getPrimitiveType())));
+    }
+    function.variables += std::move(parameters);
+    for (auto &statement : node->getBody()) {
+      generateStatement(function, statement.get());
+    }
+    std::vector<Instruction> actualInstructions =
+        instructionGenerator.generateProlog(function.stackAllocationSize);
+    for (auto &savedRegister : function.savedRegisters) {
+      actualInstructions +=
+          instructionGenerator.generateSaveRegister(savedRegister);
+    }
+    actualInstructions += std::move(function.instructions);
+    actualInstructions +=
+        instructionGenerator.generateLabel(function.labelPrefix + "_end");
+    for (auto &savedRegister : function.savedRegisters) {
+      actualInstructions +=
+          instructionGenerator.generateRestoreRegister(savedRegister);
+    }
+    actualInstructions +=
+        instructionGenerator.generateEpilog(function.stackAllocationSize);
+    function.instructions = std::move(actualInstructions);
+    return function;
+  }
 
 public:
   std::string generate(CompilationUnitNode *node) {
     std::vector<Function> functions;
-    // TODO.
+    size_t functionIndex = 0;
+    for (auto &function : node->getNodes()) {
+      functions.push_back(generateFunction(
+          static_cast<FunctionNode *>(function.get()), functionIndex++));
+    }
     std::string result =
         instructionGenerator.generateFileHeader(node->getLocation().file) +
         "\n";

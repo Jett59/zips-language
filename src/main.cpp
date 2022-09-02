@@ -1,8 +1,9 @@
 #include "ast.h"
-#include "typeCheck.h"
+#include "codegen/codegen.h"
+#include "error.h"
 #include "lexer.h"
 #include "parser.hh"
-#include "error.h"
+#include "typeCheck.h"
 #include <fstream>
 
 void usage(const char *program) {
@@ -30,11 +31,17 @@ int main(int argc, char **argv) {
   if (result == 0) {
     try {
       checkTypes(ast.get());
-      std::cout << ast->toString() << std::endl;
-    }catch (const ZipsError &e) {
+      CodeGenerator<TargetArchitecture::X86_64, TargetAbi::X86_64>
+          codeGenerator;
+      std::cout << codeGenerator.generate(
+                       static_cast<CompilationUnitNode *>(ast.get()))
+                << std::endl;
+    } catch (const ZipsError &e) {
       error(e);
+    } catch (std::runtime_error &e) {
+      std::cerr << e.what() << std::endl;
     }
-  }else {
+  } else {
     std::cerr << "Error!" << std::endl;
   }
 }
