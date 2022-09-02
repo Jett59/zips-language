@@ -270,10 +270,24 @@ public:
     return "Unknown";
   }
 
+  static constexpr std::string operandSizeSuffix(OperandSize size) {
+    switch (size) {
+    case OperandSize::I8:
+      return "b";
+    case OperandSize::I16:
+      return "w";
+    case OperandSize::I32:
+      return "l";
+    case OperandSize::I64:
+      return "q";
+    }
+    return "Unknown";
+  }
+
   struct Operand {
     struct MemoryOperand {
       Register base;
-      size_t offset;
+      ptrdiff_t offset;
     };
     std::variant<Register, size_t, std::string, MemoryOperand> value;
   };
@@ -281,10 +295,15 @@ public:
     std::string mnemonic;
     OperandSize size;
     std::vector<Operand> operands;
+    bool needsOperandSizeSuffix = true;
 
     std::string toString() const {
       std::string result;
-      result += mnemonic + " ";
+      result += mnemonic;
+      if (needsOperandSizeSuffix) {
+        result += operandSizeSuffix(size);
+      }
+      result += " ";
       for (auto &operand : operands) {
         if (std::holds_alternative<Register>(operand.value)) {
           result +=
@@ -324,6 +343,7 @@ public:
   std::string generateFunctionHeader(const std::string &name) {
     std::string result;
     result += ".globl " + name + "\n";
+    result += ".type " + name + ", @function\n";
     result += name + ":";
     return result;
   }
@@ -362,7 +382,7 @@ public:
   }
 
   Instruction generateLabel(const std::string &name) {
-    return Instruction{name, OperandSize::I64, {}};
+    return Instruction{name + ":", OperandSize::I64, {}, false};
   }
 
   Instruction generateSaveRegister(Register reg) {
@@ -377,7 +397,7 @@ public:
   }
 
   Instruction jump(const std::string &label) {
-    return Instruction{"jmp", OperandSize::I64, {Operand{label}}};
+    return Instruction{"jmp", OperandSize::I64, {Operand{label}}, false};
   }
 
   std::vector<Instruction> add(OperandSize size, Register a, Register b,
@@ -388,12 +408,12 @@ public:
     return result;
   }
 
-  Instruction stackStore(OperandSize size, Register reg, size_t offset) {
-    return Instruction{
-        "mov",
-        size,
-        {Operand{reg}, Operand{typename Operand::MemoryOperand{
-                           Register::RBP, -offset - getSize(size)}}}};
+  Instruction stackStore(OperandSize size, Register reg, ptrdiff_t offset) {
+    ptrdiff_t rbpOffset = -offset - 8;
+    return Instruction{"mov",
+                       size,
+                       {Operand{reg}, Operand{typename Operand::MemoryOperand{
+                                          Register::RBP, rbpOffset}}}};
   }
 };
 
@@ -423,22 +443,22 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
     std::vector<Register> remainingCalleeSavedRegisters =
         InstructionGenerator::calleeSavedRegisters();
 
-    Value createValue(OperandSize size) {
+    Value createValue(OperandSize size, bool isVariable = false) {
       if (availableRegisters.size() > 0) {
         Register chosenRegister = availableRegisters.back();
         availableRegisters.pop_back();
-        return Value{size, chosenRegister};
+        return Value{size, chosenRegister, isVariable};
       } else if (remainingCalleeSavedRegisters.size() > 0) {
         Register chosenRegister = remainingCalleeSavedRegisters.back();
         remainingCalleeSavedRegisters.pop_back();
         savedRegisters += chosenRegister;
-        return Value{size, chosenRegister};
+        return Value{size, chosenRegister, isVariable};
       } else {
         size_t sizeBytes = InstructionGenerator::getSize(size);
         // Naturally aligned.
         stackAllocationSize =
             (stackAllocationSize / sizeBytes) * sizeBytes + sizeBytes;
-        return Value{size, stackAllocationSize - sizeBytes};
+        return Value{size, stackAllocationSize - sizeBytes, isVariable};
       }
     }
     void destroyValue(Value value) {
@@ -451,8 +471,8 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
         availableRegisters += std::get<Register>(value.position);
       }
     }
-    Value createValue(OperandSize size, Register position) {
-      return Value{size, position};
+    Value createValue(OperandSize size, bool isVariable, Register position) {
+      return Value{size, position, isVariable};
     }
   };
 
@@ -513,12 +533,18 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       auto binaryExpression = static_cast<BinaryExpressionNode *>(node);
       Value left = generateExpression(function, binaryExpression->getLeft());
       Value right = generateExpression(function, binaryExpression->getRight());
+      Value result;
       switch (binaryExpression->getOperator()) {
-      case BinaryOperator::ADD:
-        return add(function, left, right);
+      case BinaryOperator::ADD: {
+        result = add(function, left, right);
+        break;
+      }
       default:
         throw std::runtime_error("Not implemented - binary expression");
       }
+      function.destroyValue(left);
+      function.destroyValue(right);
+      return result;
       break;
     }
     default:
@@ -551,10 +577,11 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       if (parameter.type->getType() != TypeType::PRIMITIVE) {
         throw std::runtime_error("Not implemented - non-primitive parameters");
       }
-      parameters[parameter.name] =
-          function.createValue(InstructionGenerator::operandSizeFromBits(
+      parameters[parameter.name] = function.createValue(
+          InstructionGenerator::operandSizeFromBits(
               getBits(static_cast<PrimitiveTypeNode *>(parameter.type.get())
-                          ->getPrimitiveType())), InstructionGenerator::parameterPassingRegisters()[i]);
+                          ->getPrimitiveType())), true,
+          InstructionGenerator::parameterPassingRegisters()[i]);
       i++;
     }
     function.variables += std::move(parameters);
