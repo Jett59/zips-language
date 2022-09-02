@@ -22,7 +22,8 @@ static inline std::vector<T> &operator+=(std::vector<T> &lhs,
 enum class TargetArchitecture { X86_64, AARCH64 };
 enum class TargetAbi { X86_64, MS_X64, AARCH64_EABI };
 
-template <TargetArchitecture arch, TargetAbi abi> class AssemblyInstructionGenerator {};
+template <TargetArchitecture arch, TargetAbi abi>
+class AssemblyInstructionGenerator {};
 template <TargetAbi abi>
 class AssemblyInstructionGenerator<TargetArchitecture::X86_64, abi> {
 public:
@@ -378,6 +379,22 @@ public:
   Instruction jump(const std::string &label) {
     return Instruction{"jmp", OperandSize::I64, {Operand{label}}};
   }
+
+  std::vector<Instruction> add(OperandSize size, Register a, Register b,
+                               Register dest) {
+    std::vector<Instruction> result;
+    result += Instruction{"mov", size, {Operand{a}, Operand{dest}}};
+    result += Instruction{"add", size, {Operand{b}, Operand{dest}}};
+    return result;
+  }
+
+  Instruction stackStore(OperandSize size, Register reg, size_t offset) {
+    return Instruction{
+        "mov",
+        size,
+        {Operand{reg}, Operand{typename Operand::MemoryOperand{
+                           Register::RBP, -offset - getSize(size)}}}};
+  }
 };
 
 template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
@@ -451,11 +468,11 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
     if (std::holds_alternative<Register>(value.position)) {
       Register targetRegister = std::get<Register>(value.position);
       if (allocatedRegister != targetRegister) {
-        function.instructions += instructionGenerator.generateMove(
+        function.instructions += instructionGenerator.move(
             value.size, allocatedRegister, targetRegister);
       }
     } else {
-      function.instructions += instructionGenerator.generateStackStore(
+      function.instructions += instructionGenerator.stackStore(
           value.size, allocatedRegister, std::get<size_t>(value.position));
     }
   }
@@ -492,6 +509,18 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       }
       throw std::runtime_error("Variable not found");
     }
+    case AstNodeType::BINARY_EXPRESSION: {
+      auto binaryExpression = static_cast<BinaryExpressionNode *>(node);
+      Value left = generateExpression(function, binaryExpression->getLeft());
+      Value right = generateExpression(function, binaryExpression->getRight());
+      switch (binaryExpression->getOperator()) {
+      case BinaryOperator::ADD:
+        return add(function, left, right);
+      default:
+        throw std::runtime_error("Not implemented - binary expression");
+      }
+      break;
+    }
     default:
       throw std::runtime_error("Unimplemented expression type");
     }
@@ -517,6 +546,7 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
     function.name = node->getName();
     function.labelPrefix = "l" + std::to_string(functionIndex);
     std::map<std::string, Value> parameters;
+    size_t i = 0;
     for (auto &parameter : node->getParameters()) {
       if (parameter.type->getType() != TypeType::PRIMITIVE) {
         throw std::runtime_error("Not implemented - non-primitive parameters");
@@ -524,7 +554,8 @@ template <TargetArchitecture arch, TargetAbi abi> class CodeGenerator {
       parameters[parameter.name] =
           function.createValue(InstructionGenerator::operandSizeFromBits(
               getBits(static_cast<PrimitiveTypeNode *>(parameter.type.get())
-                          ->getPrimitiveType())));
+                          ->getPrimitiveType())), InstructionGenerator::parameterPassingRegisters()[i]);
+      i++;
     }
     function.variables += std::move(parameters);
     for (auto &statement : node->getBody()) {
